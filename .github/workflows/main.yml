@@ -4,6 +4,100 @@ name: Java CI with Maven
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
+
+jobs:
+  Testing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code checkout
+        uses: actions/checkout@v4
+    
+      - name: Maven test
+        run: mvn test
+    
+      - name: Checkstyle
+        run: mvn checkstyle:checkstyle
+    
+     # Setup java 11 to be default (sonar-scanner requirement as of 5.x)
+      - name: Set Java 11
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin' # See 'Supported distributions' for available options
+          java-version: '11'
+    
+     # Setup sonar-scanner
+      - name: Setup SonarQube
+        uses: warchant/setup-sonar-scanner@v7
+       
+     # Run sonar-scanner
+      - name: SonarQube Scan
+        run: sonar-scanner
+           -Dsonar.host.url=${{ secrets.SONAR_URL }}
+           -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+           -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }}
+           -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
+           -Dsonar.sources=src/
+           -Dsonar.junit.reportsPath=target/surefire-reports/ 
+           -Dsonar.jacoco.reportsPath=target/jacoco.exec 
+           -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml
+           -Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/
+    
+    # Check the Quality Gate status.
+      - name: SonarQube Quality Gate check
+        id: sonarqube-quality-gate-check
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        # Force to fail step after specific time.
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_URL }} #OPTIONAL 
+    
+  Build and Push Docker Image:
+    steps:
+    - uses: actions/checkout@v3
+      name: Check out code
+    
+    - uses: mr-smithers-excellent/docker-build-push@v6
+      name: Build & push Docker image
+      with:
+        image: ${{ secrets.DOCKERHUB_USERNAME }}/VprofileApp
+        tags: clockbox:latest
+        registry: Docker.io
+        dockerfile: Docker-files/*/Dockerfile
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+    
+  Update_manifest:
+    docker:
+      - image: ${{ secrets.DOCKERHUB_USERNAME }}/Vprofile
+   steps:
+    - checkout
+    - setup_remote_docker
+    - run:
+        name: Updating Manifest file 
+        command: |
+            TAG= clockbox:latest
+            ((TAG--))
+            git clone https://github.com/samfolbs/K8S_Deployment_Manifest.git
+            git config --global user.email "${{ secrets.USERNAME}}@yahoo.com"
+            git config --global user.name "${{ secrets.USERNAME}}"
+            pwd
+            cd K8s_Deployment_Manifest
+            pwd
+            echo $TAG
+            sed -i "s/build-.*/build-$TAG/g" ./*deploy*.yaml
+            cat ./*deploy*.yaml
+            git add .
+            git commit -m "new build with imgTag build-$TAG"
+            git config credential.helper 'cache --timeout=120'
+            git push -q https://${{ GITHUB_PERSONAL_TOKEN }}@github.com/samfolbs/kube_manifest.git main 
+workflows:
+  GitOpsflow:
+    jobs:
+      - build_and_push
+      - Update_manifest:
+          requires:
+            - build_and_push
