@@ -1,4 +1,4 @@
-FROM Mysql:8.0.33
+FROM mysql:8.0.33
 LABEL "Project"="vprofile"
 LABEL "Author"="Seun_Sam"
 
