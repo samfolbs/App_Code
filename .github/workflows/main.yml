@@ -1,0 +1,9 @@
+# This workflow will buid a java project with Maven
+
+name: Java CI with Maven 
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
