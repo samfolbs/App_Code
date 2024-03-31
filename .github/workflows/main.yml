@@ -110,7 +110,7 @@ jobs:
           sed -i "s#${{ secrets.DOCKER_USERNAME }}.*#${{ secrets.DOCKER_USERNAME }}/vprofileapp:latest#g"8S_Deployment_Manifest/appdeploy.yaml
 
           # Update DB Image in deployment Manifest
-          sed -i "s#${{ secrets.DOCKER_USERNAME }}.*#${{ secrets.DOCKER_USERNAME }}/vprofileapp:latest#g"8S_Deployment_Manifest/dbdeployment.yaml
+          sed -i "s#${{ secrets.DOCKER_USERNAME }}.*#${{ secrets.DOCKER_USERNAME }}/vprofiledb:latest#g"8S_Deployment_Manifest/dbdeployment.yaml
 
           git add -A
           git commit -am "Update image for -${{ github.sam }} [skip ci]"
