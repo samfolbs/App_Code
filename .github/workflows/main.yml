@@ -1,4 +1,4 @@
-# This workflow will buid a java project with Maven
+# This workflow will buid a java project with Maven and update manifest  
 
 name: Java CI with Maven 
 
@@ -55,50 +55,65 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_URL }} #OPTIONAL 
     
-  Build and Push Docker Image:
+  Build_App_Image:
+    needs: Testing
+    runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-      name: Check out code
+      - uses: actions/checkout@v4
+      - name: Build and push database Docker image
+        working-directory: ./app
+        run:
+          docker build . -t ${{ secret.DOCKER_USERNAME }}/vprofileApp:latest
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+          docker push ${{ secrets.DOCKER_USERNAME }}/vprofileApp:latest
+  
+  Build_Database_Image:
+    needs: Testing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and push database Docker image
+        working-directory: ./db
+        run:
+          docker build . -t ${{ secret.DOCKER_USERNAME }}/vprofiledb:latest
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+          docker push ${{ secrets.DOCKER_USERNAME }}/vprofiledb:latest
+  
+  Build_web_Image:
+    needs: Testing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and push database Docker image
+        working-directory: ./web
+        run:
+          docker build . -t ${{ secret.DOCKER_USERNAME }}/vprofileweb:latest
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+          docker push ${{ secrets.DOCKER_USERNAME }}/vprofileweb:latest
     
-    - uses: mr-smithers-excellent/docker-build-push@v6
-      name: Build & push Docker image
-      with:
-        image: ${{ secrets.DOCKERHUB_USERNAME }}/VprofileApp
-        tags: clockbox:latest
-        registry: Docker.io
-        dockerfile: Docker-files/*/Dockerfile
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-    
-  Update_manifest:
-    docker:
-      - image: ${{ secrets.DOCKERHUB_USERNAME }}/Vprofile
-   steps:
-    - checkout
-    - setup_remote_docker
-    - run:
-        name: Updating Manifest file 
-        command: |
-            TAG= clockbox:latest
-            ((TAG--))
-            git clone https://github.com/samfolbs/K8S_Deployment_Manifest.git
-            git config --global user.email "${{ secrets.USERNAME}}@yahoo.com"
-            git config --global user.name "${{ secrets.USERNAME}}"
-            pwd
-            cd K8s_Deployment_Manifest
-            pwd
-            echo $TAG
-            sed -i "s/build-.*/build-$TAG/g" ./*deploy*.yaml
-            cat ./*deploy*.yaml
-            git add .
-            git commit -m "new build with imgTag build-$TAG"
-            git config credential.helper 'cache --timeout=120'
-            git push -q https://${{ GITHUB_PERSONAL_TOKEN }}@github.com/samfolbs/kube_manifest.git main 
-workflows:
-  GitOpsflow:
-    jobs:
-      - build_and_push
-      - Update_manifest:
-          requires:
-            - build_and_push
+  Update_manifest_files:
+    needs: [Build_App_Image, Build_Database_Image, Build_web_Image]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: https://github.com/samfolbs/K8S_Deployment_Manifest.git
+          ref: main
+          token: ${{secrets.GITHUB_PERSONAL_TOKEN}}
+      - name: setup git config
+        run: |
+          git config --global user.email "${{ secrets.USER_EMAIL }}"
+          git config --global user.name "${{ secrets.USER_NAME }}"
+          echo ${{ github.sam }}
+
+          # Update App Image in deployment Manifest
+          sed -i "s#${{ secrets.DOCKER_USERNAME }}.*#${{ secrets.DOCKER_USERNAME }}/vprofileapp:latest#g"8S_Deployment_Manifest/appdeploy.yaml
+
+          # Update DB Image in deployment Manifest
+          sed -i "s#${{ secrets.DOCKER_USERNAME }}.*#${{ secrets.DOCKER_USERNAME }}/vprofileapp:latest#g"8S_Deployment_Manifest/dbdeployment.yaml
+
+          git add -A
+          git commit -am "Update image for -${{ github.sam }} [skip ci]"
+      - run: echo "${{ github }}"  
+      - run: git push origin main
 
